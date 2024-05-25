@@ -1,11 +1,14 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <SD.h>
+#include <SPI.h>
 
 LiquidCrystal_I2C lcd(0x27, 16, 2); // set the LCD address to 0x27 for a 16 chars and 2 line display
 
 #define START_MENU 0
 #define GAME 1
 #define GAME_OVER 2
+#define LEADERBOARD 3
 
 #define jump_duration 3
 
@@ -38,6 +41,19 @@ int jumpCounter = 0; // Counter to manage the duration of the jump
 
 // cactus spawn
 int cactusSpawnCounter = 0;
+
+// file from SD Card
+
+File leaderboardFile;
+String fileName = "lead.csv";
+
+int crtLine = 1;
+int leaderBoardEntriesCount = 0;
+int lineCount = 0;
+
+// user and high score
+String crtUser = "Dino1"; // Example current user
+int crtUsersHighScore = 0;
 
 void graphics(){
    byte dino[56] = {
@@ -129,15 +145,176 @@ void initGame() {
   leftFoot = true;
 }
 
+void initLeaderboardMenu() {
+  crtLine = 1;
+}
+
+void switchUser(String userName) {
+  crtUser = userName;
+  crtUsersHighScore = getUserHighScore(fileName, userName);
+}
+
+int getUserHighScore(String fileName, String userName) {
+  // Open the leaderboard file for reading
+  File file = SD.open(fileName);
+  if (!file) {
+    Serial.println("Error opening file");
+    return -1; // Return an error value if the file cannot be opened
+  }
+
+  // Iterate through the file line by line
+  while (file.available()) {
+    String line = readLine(file);
+    int commaIndex = line.indexOf(',');
+    if (commaIndex == -1) {
+      continue; // Skip lines without a comma
+    }
+
+    String playerName = line.substring(0, commaIndex);
+    if (playerName == userName) {
+      int playerScore = line.substring(commaIndex + 1).toInt();
+      file.close();
+      return playerScore;
+    }
+  }
+
+  file.close();
+  return -1; // Return -1 if the user is not found
+}
+
 void setup() {
+  // Debugging 
+  Serial.begin(9060);
+  while(!Serial) {};
+
+  // SD Card
+  InitializeCard();
+
+  // Print leaderboard file contents to serial monitor
+  readMyFile();
+
+  // LCD Screen
   lcd.init();         // initialize the lcd
   lcd.backlight();    // Turn on the LCD screen backlight
+
+  // Buttons
   pinMode(downButton, INPUT); // initialize the pushbutton pin as an input
   // pinMode(buttonPin, INPUT_PULLUP); // enable the internal pull-up resistor
   pinMode(okButton, INPUT);
   pinMode(upButton, INPUT); // initialize the pushbutton pin as an input
+
+  // Graphics
   graphics();
 
+  // testing
+  File file = SD.open(fileName);
+  if (!file) {
+    Serial.println("Failed to open file");
+    return;
+  }
+
+  int numberOfLines = countLines(file);
+  lineCount = numberOfLines;
+  Serial.print("Number of lines in file: ");
+  Serial.println(numberOfLines);
+
+  file.close();
+
+  crtUser = "Dino1";
+  crtUsersHighScore = getUserHighScore(fileName, crtUser);
+  Serial.print("User and score: ");
+  Serial.print(crtUser);
+  Serial.print(", ");
+  Serial.println(crtUsersHighScore);
+}
+
+int countLines(File &file) {
+  int lineCount = 0;
+  while (file.available()) {
+    char c = file.read();
+    if (c == '\n') {
+      lineCount++;
+    }
+  }
+  return lineCount;
+}
+
+void updateLeaderboard() {
+  String tempFileName = "temp.csv";
+  File originalFile = SD.open("lead.csv", FILE_READ);
+  File tempFile = SD.open(tempFileName, FILE_WRITE);
+
+  if (!originalFile || !tempFile) {
+    Serial.println("Error opening file");
+    return;
+  }
+
+  bool userUpdated = false;
+  int userPosition = -1;
+  int currentPosition = 0;
+
+  while (originalFile.available()) {
+    String line = readLine(originalFile);
+    int commaIndex = line.indexOf(',');
+    String playerName = line.substring(0, commaIndex);
+    int playerScore = line.substring(commaIndex + 1).toInt();
+
+    if (playerName == crtUser) {
+      userPosition = currentPosition;
+    }
+
+    if (!userUpdated && crtUsersHighScore > playerScore) {
+      tempFile.print(crtUser);
+      tempFile.print(",");
+      tempFile.println(crtUsersHighScore);
+      userUpdated = true;
+    }
+
+    if (playerName != crtUser) {
+      // tempFile.println(line);
+      // if (playerScore.length() > 0) {
+      //   playerScore = playerScore.substring(0, playerScore.length() - 1);
+      // }
+      tempFile.print(playerName);
+      tempFile.print(",");
+      tempFile.println(playerScore);
+    }
+
+    currentPosition++;
+  }
+
+  // If the user has not been updated yet, it means their new score is the lowest
+  if (!userUpdated) {
+    tempFile.print(crtUser);
+    tempFile.print(",");
+    tempFile.println(crtUsersHighScore);
+  }
+
+  originalFile.close();
+  tempFile.close();
+
+  // Remove the original file
+  SD.remove("lead.csv");
+
+  // Rename the temp file to the original file name
+  // Copy temp file to original file name
+  tempFile = SD.open(tempFileName, FILE_READ);
+  originalFile = SD.open("lead.csv", FILE_WRITE);
+
+  if (!tempFile || !originalFile) {
+    Serial.println("Error reopening files");
+    return;
+  }
+
+  while (tempFile.available()) {
+    originalFile.write(tempFile.read());
+  }
+
+  tempFile.close();
+  originalFile.close();
+
+  // Remove the temporary file
+  SD.remove(tempFileName);
 }
 
 void startMenu() {
@@ -191,20 +368,156 @@ void startMenu() {
 }
 
 void gameOver() {
+
+  DOWNbuttonState = digitalRead(downButton);
+  UPbuttonState = digitalRead(upButton);
+  OKbuttonState = digitalRead(okButton);
+
   // lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Game over!");
   lcd.setCursor(0, 1);
   lcd.print("Score: ");
   lcd.print(score);
-  // delay(120);
+  
+  if (score > crtUsersHighScore) {
+    crtUsersHighScore = score;
+    updateLeaderboard();
+    readMyFile();
+  }
+
+  if (OKbuttonState == HIGH && OKbuttonState != OKlastButtonState) {
+      state = LEADERBOARD;
+      initLeaderboardMenu();
+      lcd.clear();
+    }
+
+  DOWNlastButtonState = DOWNbuttonState;
+  UPlastButtonState = UPbuttonState;
+  OKlastButtonState = OKbuttonState;
+}
+
+void InitializeCard() {
+  Serial.print("Beginning of init of SD card: ");
+  if (!SD.begin(10)) {
+    Serial.print("fail\n");
+  } else {
+    Serial.print("success\n");
+    Serial.print("\n");
+  }
+}
+
+void readMyFile() {
+  leaderboardFile = SD.open(fileName);
+  if (leaderboardFile) {
+    Serial.print("Reading data stored in " + fileName + ": \n");
+
+    while(leaderboardFile.available()) {
+      Serial.write(leaderboardFile.read());
+    }
+
+    leaderboardFile.close();
+
+  } else {
+    Serial.println("Error opening file");
+  }
+}
+
+String readLine(File &file) {
+  String line = "";
+  while (file.available()) {
+    char c = file.read();
+    if (c == '\n') {
+      break;
+    }
+    line += c;
+  }
+  return line;
+}
+
+void leaderboard() {
+
+  DOWNbuttonState = digitalRead(downButton);
+  UPbuttonState = digitalRead(upButton);
+  OKbuttonState = digitalRead(okButton);
+
+  // Handling button presses
+  if (DOWNbuttonState == HIGH && DOWNbuttonState != DOWNlastButtonState) {
+    crtLine++;
+    lcd.clear();
+    if (crtLine > lineCount - 1) {
+      crtLine = 1;
+    }
+  } else if (UPbuttonState == HIGH && UPbuttonState != UPlastButtonState) {
+    crtLine--;
+    lcd.clear();
+    if (crtLine < 1) {
+      crtLine = lineCount - 1;
+    }
+  }
+
+  // Displaying leaderboard entries
+
+  // Open the leaderboard file
+  leaderboardFile = SD.open(fileName);
+  if (!leaderboardFile) {
+    Serial.println("Error opening file");
+    return;
+  }
+
+  // Move to the correct line in the file
+  String previousLine ="";
+
+  for (int i = 0; i < crtLine; i++) {
+    if (!leaderboardFile.available()) {
+      // Reached the end of the file
+      leaderboardFile.close();
+      return;
+    }
+    // The previous line will be displayed on the top row
+    previousLine = readLine(leaderboardFile);
+  }
+  int commaIndex = previousLine.indexOf(',');
+  String playerName = previousLine.substring(0, commaIndex);
+  int playerScore = previousLine.substring(commaIndex + 1).toInt();
+
+  // Display top row:
+  lcd.setCursor(0, 0);
+  lcd.print(crtLine);
+  lcd.print(" ");
+  lcd.print(playerName);
+  lcd.setCursor(16 - getDigitCount(playerScore), 0);
+  lcd.print(playerScore);
+
+  // Display the current line on the bottom row
+  String line = readLine(leaderboardFile);
+  commaIndex = line.indexOf(',');
+  playerName = line.substring(0, commaIndex);
+  playerScore = line.substring(commaIndex + 1).toInt();
+  lcd.setCursor(0, 1);
+  lcd.print(crtLine + 1);
+  lcd.print(" ");
+  lcd.print(playerName);
+  lcd.setCursor(16 - getDigitCount(playerScore), 1);
+  lcd.print(playerScore);
+  leaderboardFile.close();
+
+  DOWNlastButtonState = DOWNbuttonState;
+  UPlastButtonState = UPbuttonState;
+  OKlastButtonState = OKbuttonState;
+
+  delay(120);
 }
 
 void detectCollision() {
   // check for collision with cactus
   if (!isJumping && ground[2]) {
-    // collision detected
+    // collision detected:
+    // freeze the display to indicate game over:    
+    delay(400);
+    // clear the screen
     lcd.clear();
+    // switch state => go to game over screen
     state = GAME_OVER;
   }
 }
@@ -279,6 +592,9 @@ void game() {
   lcd.setCursor(16 - getDigitCount(score), 0);
   lcd.print(score);
 
+  // detect collision
+  detectCollision();
+
   // decrease jump counter
   if (isJumping) {
     jumpCounter--;
@@ -286,9 +602,6 @@ void game() {
       isJumping = false; // End the jump after the counter reaches 0
     }
   }
-
-  // detect collision
-  detectCollision();
 
   // Shift ground to the left
   for (int i = 0; i < 15; i++) {
@@ -309,9 +622,10 @@ void game() {
   if (score >= 9999) {
     // safeguard against ridiculous high score
     state = GAME_OVER;
-    // score = 0;
   }
   cactusSpawnCounter++;
+
+
   if (leftFoot) {
     leftFoot = false;
   } else {
@@ -319,11 +633,11 @@ void game() {
   }
   
   UPlastButtonState = UPbuttonState;
-  delay(180);
+  delay(120);
 }
 
-
 void loop() {
+  
   switch (state) {
     case START_MENU:
       startMenu();
@@ -334,5 +648,10 @@ void loop() {
     case GAME_OVER:
       gameOver();
       break;
+    case LEADERBOARD:
+      leaderboard();
+      break;
   }
+
+
 }
