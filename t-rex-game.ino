@@ -13,13 +13,13 @@ LiquidCrystal_I2C lcd(0x27, 16, 2); // set the LCD address to 0x27 for a 16 char
 
 #define jump_duration 3
 
-// const int downButton = 2;
-// const int upButton =  7;
-// const int okButton = 4;
-
 #define downButton 2
 #define upButton 7
 #define okButton 4
+
+#define START_ACTION 0
+#define SELECT_ACTION 1
+#define LEADERBOARD_ACTION 2
 
 bool DOWNbuttonState = 0;
 bool DOWNlastButtonState = 0;
@@ -28,16 +28,18 @@ bool UPlastButtonState = 0;
 bool OKbuttonState = 0;
 bool OKlastButtonState = 0;
 
-byte state = 4;
+byte state = 0;
 
 int score = 0;
-int scoreDigitsCount = 1;
+byte difficulty = 180;
+byte difficultyIncreaseCounter = 0;
+byte scoreDigitsCount = 1;
 
 bool leftFoot = true;
 
-byte selection = 0;
-// int message = 0;
-// int selection = 0;
+// byte selection = 0;
+bool cursorOnTopPos = true;
+
 bool ground[16] = {false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false};
 
 // jump
@@ -46,6 +48,7 @@ byte jumpCounter = 0; // Counter to manage the duration of the jump
 
 // cactus spawn
 byte cactusSpawnCounter = 0;
+byte cactusSpacing = 6;
 
 // file from SD Card
 
@@ -55,7 +58,7 @@ byte cactusSpawnCounter = 0;
 // const String usersFileName = "users.txt";
 
 byte crtLine = 1;
-int crtLine2 = 0;
+byte crtLine2 = 0;
 byte leaderBoardEntriesCount = 0;
 byte lineCount = 0;
 
@@ -131,7 +134,7 @@ void graphics(){
   0b00000,
   0b00000,
    };
-   int g;
+   byte g;
    //draw dino positions
    for (g = 0; g < 7; g++) {
        lcd.createChar(g, &dino[g*8]);
@@ -139,6 +142,11 @@ void graphics(){
 }
 
 void initGame() {
+  lcd.clear();
+  for (int i = 0; i < 16; i++) {
+    ground[i] = false;
+  }
+
   score = 0;
   isJumping = false;
   jumpCounter = 0;
@@ -151,10 +159,19 @@ void initGame() {
 
   scoreDigitsCount = 1;
   leftFoot = true;
+
+  difficulty = 0;
+  difficultyIncreaseCounter = 0;
+
+  cactusSpacing = 6;
 }
 
 void initMenu() {
   crtLine = 1;
+  crtLine2 = 0;
+  cursorOnTopPos = true;
+  // lcd.clear();
+  // delay(500);
 }
 
 void switchUser(String userName) {
@@ -163,18 +180,18 @@ void switchUser(String userName) {
 }
 
 int getUserHighScore(String userName) {
-  Serial.println("lead.csv");
+  //Serial.println("lead.csv");
   // Open the leaderboard file for reading
   File file = SD.open("lead.csv");
   if (!file) {
-    Serial.println("Error opening file");
+    //Serial.println("Error opening file");
     return -1; // Return an error value if the file cannot be opened
   }
 
   // Iterate through the file line by line
   while (file.available()) {
     String line = readLine(file);
-    int commaIndex = line.indexOf(',');
+    byte commaIndex = line.indexOf(',');
     if (commaIndex == -1) {
       continue; // Skip lines without a comma
     }
@@ -186,9 +203,11 @@ int getUserHighScore(String userName) {
     // Serial.println(line);
 
     if (playerName == userName) {
-      int playerScore = line.substring(commaIndex + 1).toInt();
+      // int playerScore = line.substring(commaIndex + 1).toInt();
+      // file.close();
+      // return playerScore;
       file.close();
-      return playerScore;
+      return line.substring(commaIndex + 1).toInt();
     }
   }
 
@@ -227,7 +246,7 @@ void setup() {
     return;
   }
 
-  int numberOfLines = countLines(file);
+  byte numberOfLines = countLines(file);
   lineCount = numberOfLines;
   Serial.print("Number of lines in file: ");
   Serial.println(numberOfLines);
@@ -245,8 +264,8 @@ void setup() {
   Serial.println(crtUsersHighScore);
 }
 
-int countLines(File &file) {
-  int lineCount = 0;
+byte countLines(File &file) {
+  byte lineCount = 0;
   while (file.available()) {
     char c = file.read();
     if (c == '\n') {
@@ -267,12 +286,12 @@ void updateLeaderboard() {
   }
 
   bool userUpdated = false;
-  int userPosition = -1;
-  int currentPosition = 0;
+  byte userPosition = -1;
+  byte currentPosition = 0;
 
   while (originalFile.available()) {
     String line = readLine(originalFile);
-    int commaIndex = line.indexOf(',');
+    byte commaIndex = line.indexOf(',');
     String playerName = line.substring(0, commaIndex);
     int playerScore = line.substring(commaIndex + 1).toInt();
 
@@ -316,7 +335,7 @@ void updateLeaderboard() {
   originalFile = SD.open("lead.csv", FILE_WRITE);
 
   if (!tempFile || !originalFile) {
-    Serial.println("Error reopening files");
+    //Serial.println("Error reopening files");
     return;
   }
 
@@ -337,41 +356,130 @@ void startMenu() {
   UPbuttonState = digitalRead(upButton);
   OKbuttonState = digitalRead(okButton);
 
-  if (DOWNbuttonState == HIGH && DOWNbuttonState != DOWNlastButtonState){
-    if (selection == 0) {
-      selection++;
+  // Serial.println(crtLine2);
+
+  // Handling button presses
+  static String actions[3] = {"START", "SELECT USER", "LEADERBOARD"};
+  if (DOWNbuttonState == HIGH && DOWNbuttonState != DOWNlastButtonState) {
+    if (crtLine2 < 2) {
+      crtLine2++;
+      if (!cursorOnTopPos) { 
+        lcd.clear();
+      } else {
+        // clear cursor
+        lcd.setCursor(0, 0);
+        lcd.print(" ");
+        lcd.setCursor(0, 1);
+        lcd.print(" ");
+        cursorOnTopPos = !cursorOnTopPos;
+      }
     }
-  }
-  else {
-      if (UPbuttonState == HIGH && UPbuttonState != UPlastButtonState){
-        if (selection == 1) {
-          selection--;
-        }
+  } else if (UPbuttonState == HIGH && UPbuttonState != UPlastButtonState) {
+    if (crtLine2 > 0) {
+      crtLine2--;
+      if (cursorOnTopPos) { 
+        lcd.clear();
+      } else {
+        // clear cursor
+        lcd.setCursor(0, 0);
+        lcd.print(" ");
+        lcd.setCursor(0, 1);
+        lcd.print(" ");
+        cursorOnTopPos = !cursorOnTopPos;
+      }
     }
   }
 
-  lcd.clear();
+  // on top row
   lcd.setCursor(1, 0);
-  lcd.print("Start");
+  if (cursorOnTopPos) {
+    lcd.print(actions[crtLine2]);
+  } else {
+    lcd.print(actions[crtLine2 - 1]);
+  }
+  // on bottom row
   lcd.setCursor(1, 1);
-  lcd.print("Select player");
-  
-  // draw selection arrow
-  if (selection == 0) {
+  if (!cursorOnTopPos) {
+    lcd.print(actions[crtLine2]);
+  } else {
+    lcd.print(actions[crtLine2 + 1]);
+  }
+
+  if (cursorOnTopPos) {
     lcd.setCursor(0, 0);
   } else {
     lcd.setCursor(0, 1);
   }
   lcd.print(">");
 
-  // play is selected
-  if (selection == 0) {
-    // init game variables
-    initGame();
-    if (OKbuttonState == HIGH && OKbuttonState != OKlastButtonState) {
-      state = GAME;
-      lcd.clear();
-    }    
+  // switch(crtLine2) {
+  //   case START_ACTION:
+  //     //code
+  //     break;
+  //   case SELECT_ACTION:
+  //     //code
+  //     break;
+  //   case LEADERBOARD_ACTION:
+  //     //code
+  //     break;
+  // }
+
+  // if (DOWNbuttonState == HIGH && DOWNbuttonState != DOWNlastButtonState){
+  //   if (selection == 0) {
+  //     selection++;
+  //   }
+  // }
+  // else {
+  //     if (UPbuttonState == HIGH && UPbuttonState != UPlastButtonState){
+  //       if (selection == 1) {
+  //         selection--;
+  //       }
+  //   }
+  // }
+
+  // lcd.clear();
+  // lcd.setCursor(1, 0);
+  // lcd.print("Start");
+  // lcd.setCursor(1, 1);
+  // lcd.print("Select player");
+  
+  // // draw selection arrow
+  // if (selection == 0) {
+  //   lcd.setCursor(0, 0);
+  // } else {
+  //   lcd.setCursor(0, 1);
+  // }
+  // lcd.print(">");
+
+  // // play is selected
+  // if (selection == 0) {
+  //   // init game variables
+  //   initGame();
+  //   if (OKbuttonState == HIGH && OKbuttonState != OKlastButtonState) {
+  //     state = GAME;
+  //     lcd.clear();
+  //   }    
+  // }
+
+  if (OKbuttonState == HIGH && OKbuttonState != OKlastButtonState) {
+    switch(crtLine2) {
+      case START_ACTION:
+        lcd.clear();
+        state = GAME;
+        initGame();
+        break;
+      case SELECT_ACTION:
+        lcd.clear();
+        state = USER_SELECT;
+        initMenu();
+        break;
+      case LEADERBOARD_ACTION:
+        lcd.clear();
+        state = LEADERBOARD;
+        initMenu();
+        lcd.clear();
+        break;
+    }
   }
 
   DOWNlastButtonState = DOWNbuttonState;
@@ -408,14 +516,14 @@ void userSelect() {
   // Open the leaderboard file
   File file = SD.open("lead.csv");
   if (!file) {
-    Serial.println("Error opening file");
+    //Serial.println("Error opening file");
     return;
   }
 
   // Move to the correct line in the file
   String previousLine ="";
 
-  for (int i = 0; i < crtLine2; i++) {
+  for (byte i = 0; i < crtLine2; i++) {
     if (!file.available()) {
       // Reached the end of the file
       file.close();
@@ -424,7 +532,7 @@ void userSelect() {
     // The previous line will be displayed on the top row
     previousLine = readLine(file);
   }
-  int commaIndex;
+  byte commaIndex;
   String playerName;
   if (crtLine2 > 0) {
     commaIndex = previousLine.indexOf(',');
@@ -453,6 +561,7 @@ void userSelect() {
   if (OKbuttonState == HIGH && OKbuttonState != OKlastButtonState) {
     lcd.clear();
     state = START_MENU;
+    initMenu();
     switchUser(playerName);
   }
 
@@ -470,15 +579,15 @@ void gameOver() {
   OKbuttonState = digitalRead(okButton);
 
   lcd.setCursor(0, 0);
-  lcd.print("Game over!");
+  lcd.print("GAME OVER!");
   lcd.setCursor(0, 1);
-  lcd.print("Score: ");
-  lcd.print(score);
+  lcd.print("SCORE: ");
+  lcd.print(score - 1);
 
   if (OKbuttonState == HIGH && OKbuttonState != OKlastButtonState) {
+      lcd.clear();
       state = LEADERBOARD;
       initMenu();
-      lcd.clear();
     }
 
   DOWNlastButtonState = DOWNbuttonState;
@@ -487,19 +596,19 @@ void gameOver() {
 }
 
 void InitializeCard() {
-  Serial.print("Beginning of init of SD card: ");
+  //Serial.print("Beginning of init of SD card: ");
   if (!SD.begin(10)) {
-    Serial.print("fail\n");
+    //Serial.print("fail\n");
   } else {
-    Serial.print("success\n");
-    Serial.print("\n");
+    //Serial.print("success\n");
+    //Serial.print("\n");
   }
 }
 
 void readMyFile() {
   File file = SD.open("lead.csv");
   if (file) {
-    Serial.print("Reading data stored in lead.csv: \n");
+    //Serial.print("Reading data stored in lead.csv: \n");
 
     while(file.available()) {
       Serial.write(file.read());
@@ -508,7 +617,7 @@ void readMyFile() {
     file.close();
 
   } else {
-    Serial.println("Error opening file");
+    //Serial.println("Error opening file");
   }
 }
 
@@ -550,14 +659,14 @@ void leaderboard() {
   // Open the leaderboard file
   File file = SD.open("lead.csv");
   if (!file) {
-    Serial.println("Error opening file");
+    //Serial.println("Error opening file");
     return;
   }
 
   // Move to the correct line in the file
   String previousLine ="";
 
-  for (int i = 0; i < crtLine; i++) {
+  for (byte i = 0; i < crtLine; i++) {
     if (!file.available()) {
       // Reached the end of the file
       file.close();
@@ -566,7 +675,7 @@ void leaderboard() {
     // The previous line will be displayed on the top row
     previousLine = readLine(file);
   }
-  int commaIndex = previousLine.indexOf(',');
+  byte commaIndex = previousLine.indexOf(',');
   String playerName = previousLine.substring(0, commaIndex);
   int playerScore = previousLine.substring(commaIndex + 1).toInt();
 
@@ -591,6 +700,12 @@ void leaderboard() {
   lcd.print(playerScore);
   file.close();
 
+  if (OKbuttonState == HIGH && OKbuttonState != OKlastButtonState) {
+    lcd.clear();
+    state = START_MENU;
+    initMenu();
+  }
+
   DOWNlastButtonState = DOWNbuttonState;
   UPlastButtonState = UPbuttonState;
   OKlastButtonState = OKbuttonState;
@@ -613,7 +728,7 @@ void detectCollision() {
       readMyFile();
     }
     time_spent = millis() - time_spent;
-    Serial.println(time_spent);
+    //Serial.println(time_spent);
     // freeze the display to indicate game over:
     if (time_spent < 400 && time_spent >= 0) {
       delay(400 - time_spent);
@@ -625,11 +740,11 @@ void detectCollision() {
   }
 }
 
-int getDigitCount(int n) {
+byte getDigitCount(int n) {
   if (n == 0) {
     return 1;
   }
-  int c = 0;
+  byte c = 0;
   while(n) {
     c++;
     n /= 10;
@@ -648,7 +763,7 @@ void game() {
 
   // display ground
   lcd.setCursor(0, 1);
-  for (int i = 0; i < 16; i++) {
+  for (byte i = 0; i < 16; i++) {
     if (i == 1 && !isJumping) {
       // display dino left side
       if (leftFoot) {
@@ -710,11 +825,11 @@ void game() {
   }
 
   // Shift ground to the left
-  for (int i = 0; i < 15; i++) {
+  for (byte i = 0; i < 15; i++) {
     ground[i] = ground[i + 1];
   }
   // Generate cactus on rightmost position
-  if (cactusSpawnCounter >= 6) {
+  if (cactusSpawnCounter >= cactusSpacing) {
     ground[15] = (random(5) == 0);
     if (ground[15]) {
       cactusSpawnCounter = 0;
@@ -727,6 +842,7 @@ void game() {
   score++;
   if (score >= 9999) {
     // safeguard against ridiculous high score
+    lcd.clear();
     state = GAME_OVER;
   }
   cactusSpawnCounter++;
@@ -737,9 +853,21 @@ void game() {
   } else {
     leftFoot = true;
   }
+
+  // increase difficulty
+  difficultyIncreaseCounter++;
+  if (difficultyIncreaseCounter >= 10) {
+    difficultyIncreaseCounter = 0;
+    difficulty++;
+  }
+
+  // periodically decrease spacing between cacti
+  if (score % 50 == 0 && cactusSpacing > 4) {
+    cactusSpacing--;
+  }
   
   UPlastButtonState = UPbuttonState;
-  delay(120);
+  delay(180 - difficulty);
 }
 
 void loop() {
