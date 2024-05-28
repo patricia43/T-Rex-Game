@@ -24,8 +24,8 @@
   extern bool ground[16] = {false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false};
 
   // jump
-  extern bool isJumping = false; // Flag to track if the dino is jumping
-  extern byte jumpCounter = 0; // Counter to manage the duration of the jump
+  extern bool isJumping = false;
+  extern byte jumpCounter = 0;
 
   // cactus spawn
   extern byte cactusSpawnCounter = 0;

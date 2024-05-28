@@ -4,13 +4,20 @@
 #include <SPI.h>
 #include "common.h"
 
+#define START_ACTION 0
+#define SELECT_ACTION 1
+#define LEADERBOARD_ACTION 2
+
+void initMenu() {
+  crtLine = 1;
+  crtLine2 = 0;
+  cursorOnTopPos = true;
+}
+
 void startMenu() {
-  
   DOWNbuttonState = digitalRead(downButton);
   UPbuttonState = digitalRead(upButton);
   OKbuttonState = digitalRead(okButton);
-
-  // Serial.println(crtLine2);
 
   // Handling button presses
   static String actions[3] = {"START", "SELECT USER", "LEADERBOARD"};
@@ -95,8 +102,6 @@ void startMenu() {
 }
 
 void userSelect() {
-  //Serial.println("Entering userSelect");
-
   DOWNbuttonState = digitalRead(downButton);
   UPbuttonState = digitalRead(upButton);
   OKbuttonState = digitalRead(okButton);
@@ -109,26 +114,27 @@ void userSelect() {
       crtLine2 = 0;
     }
   } else if (UPbuttonState == HIGH && UPbuttonState != UPlastButtonState) {
-    crtLine2--;
-    lcd.clear();
-    if (crtLine2 < 0) {
-      crtLine2 = lineCount - 1;
+    if (crtLine2 > 0) {
+      crtLine2--;
+      lcd.clear();
+      // if (crtLine2 < 0) {
+      //   crtLine2 = lineCount - 1;
+      // }
     }
   }
 
   // Displaying leaderboard entries
 
   // Open the leaderboard file
-  File file = SD.open("lead.csv");
+  File file = SD.open("users.txt");
   if (!file) {
-    //Serial.println("Error opening file");
     return;
   }
 
   // Move to the correct line in the file
   String previousLine ="";
 
-  for (byte i = 0; i < crtLine2; i++) {
+  for (int i = 0; i < crtLine2; i++) {
     if (!file.available()) {
       // Reached the end of the file
       file.close();
@@ -137,15 +143,11 @@ void userSelect() {
     // The previous line will be displayed on the top row
     previousLine = readLine(file);
   }
-  byte commaIndex;
-  String playerName;
+  previousLine.remove(previousLine.length() - 1);
   if (crtLine2 > 0) {
-    commaIndex = previousLine.indexOf(',');
-    playerName = previousLine.substring(0, commaIndex);
-
     // Display top row:
     lcd.setCursor(0, 0);
-    lcd.print(playerName);
+    lcd.print(previousLine);
   } else {
     lcd.setCursor(0, 0);
     lcd.print("SELECT:");
@@ -153,11 +155,10 @@ void userSelect() {
 
   // Display the current line on the bottom row
   String line = readLine(file);
-  commaIndex = line.indexOf(',');
-  playerName = line.substring(0, commaIndex);
+  line.remove(line.length() - 1);
   lcd.setCursor(0, 1);
   lcd.print(">");
-  lcd.print(playerName);
+  lcd.print(line);
 
   file.close();
 
@@ -165,7 +166,7 @@ void userSelect() {
     lcd.clear();
     state = START_MENU;
     initMenu();
-    switchUser(playerName);
+    switchUser(line);
   }
 
   DOWNlastButtonState = DOWNbuttonState;
@@ -176,7 +177,6 @@ void userSelect() {
 }
 
 void gameOver() {
-
   DOWNbuttonState = digitalRead(downButton);
   UPbuttonState = digitalRead(upButton);
   OKbuttonState = digitalRead(okButton);
@@ -199,7 +199,6 @@ void gameOver() {
 }
 
 void leaderboard() {
-
   DOWNbuttonState = digitalRead(downButton);
   UPbuttonState = digitalRead(upButton);
   OKbuttonState = digitalRead(okButton);
@@ -224,7 +223,6 @@ void leaderboard() {
   // Open the leaderboard file
   File file = SD.open("lead.csv");
   if (!file) {
-    //Serial.println("Error opening file");
     return;
   }
 

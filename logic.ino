@@ -10,12 +10,10 @@ void switchUser(String userName) {
 }
 
 int getUserHighScore(String userName) {
-  // Serial.println("lead.csv");
   // Open the leaderboard file for reading
   File file = SD.open("lead.csv");
   if (!file) {
-    // Serial.println("Error opening file");
-    return -1; // Return an error value if the file cannot be opened
+    return -1;
   }
 
   // Iterate through the file line by line
@@ -27,15 +25,8 @@ int getUserHighScore(String userName) {
     }
 
     String playerName = line.substring(0, commaIndex);
-    // Serial.print("Player name: ");
-    // Serial.println(playerName);
-    // Serial.print("Player score string: ");
-    // Serial.println(line);
 
     if (playerName == userName) {
-      // int playerScore = line.substring(commaIndex + 1).toInt();
-      // file.close();
-      // return playerScore;
       file.close();
       return line.substring(commaIndex + 1).toInt();
     }
@@ -62,7 +53,6 @@ void updateLeaderboard() {
   File tempFile = SD.open(tempFileName, FILE_WRITE);
 
   if (!originalFile || !tempFile) {
-    Serial.println("Error opening file");
     return;
   }
 
@@ -116,7 +106,6 @@ void updateLeaderboard() {
   originalFile = SD.open("lead.csv", FILE_WRITE);
 
   if (!tempFile || !originalFile) {
-    //Serial.println("Error reopening files");
     return;
   }
 
@@ -129,18 +118,6 @@ void updateLeaderboard() {
 
   // Remove the temporary file
   SD.remove(tempFileName);
-}
-
-byte getDigitCount(int n) {
-  if (n == 0) {
-    return 1;
-  }
-  byte c = 0;
-  while(n) {
-    c++;
-    n /= 10;
-  }
-  return c;
 }
 
 void InitializeCard() {
@@ -156,16 +133,11 @@ void InitializeCard() {
 void readMyFile() {
   File file = SD.open("lead.csv");
   if (file) {
-    //Serial.print("Reading data stored in lead.csv: \n");
-
     while(file.available()) {
       Serial.write(file.read());
     }
-
     file.close();
-
   } else {
-    //Serial.println("Error opening file");
   }
 }
 
@@ -179,4 +151,16 @@ String readLine(File &file) {
     line += c;
   }
   return line;
+}
+
+byte getDigitCount(int n) {
+  if (n == 0) {
+    return 1;
+  }
+  byte c = 0;
+  while(n) {
+    c++;
+    n /= 10;
+  }
+  return c;
 }

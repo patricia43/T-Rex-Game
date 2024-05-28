@@ -6,29 +6,59 @@
 
 LiquidCrystal_I2C lcd(0x27, 16, 2); // set the LCD address to 0x27 for a 16 chars and 2 line display
 
+// states
 #define START_MENU 0
 #define GAME 1
 #define GAME_OVER 2
 #define LEADERBOARD 3
 #define USER_SELECT 4
 
-#define jump_duration 3
-
+// pins
 #define downButton 2
 #define upButton 7
 #define okButton 4
+#define BUZZER_PIN 8
 
-#define START_ACTION 0
-#define SELECT_ACTION 1
-#define LEADERBOARD_ACTION 2
+// sound
+#define JUMP_SOUND_FREQUENCY 800 // A5
+#define JUMP_SOUND_DURATION 75 // jump sound duration in milliseconds
 
-void initMenu() {
-  crtLine = 1;
-  crtLine2 = 0;
-  cursorOnTopPos = true;
-}
+#define VOLUME 128
+
+// graphics
+void graphics();
+
+// logic
+void switchUser(String userName);
+int getUserHighScore(String userName);
+byte countLines(File &file);
+void updateLeaderboard();
+void InitializeCard();
+void readMyFile();
+String readLine(File &file);
+byte getDigitCount(int n);
+
+// gameplay
+void initGame();
+void detectCollision();
+void game();
+
+// menus
+void initMenu();
+void startMenu();
+void userSelect();
+void gameOver();
+void leaderboard();
+
+// sound
+void playGameOverMelodyWithVolume(int volume);
+void playNoteWithVolume(int note, int duration, int volume);
 
 void setup() {
+  // Debugging 
+  // Serial.begin(9060);
+  // while(!Serial) {};
+
   // SD Card
   InitializeCard();
 
@@ -37,11 +67,14 @@ void setup() {
   lcd.backlight();    // Turn on the LCD screen backlight
 
   // Buttons
-  pinMode(downButton, INPUT); // initialize the pushbutton pin as an input
+  pinMode(downButton, INPUT);
   pinMode(okButton, INPUT);
-  pinMode(upButton, INPUT); // initialize the pushbutton pin as an input
+  pinMode(upButton, INPUT);
 
-  // Initialize graphics
+  // Buzzer
+  pinMode(BUZZER_PIN, OUTPUT);
+
+  // Graphics
   graphics();
 
   crtUser = "Dino1";

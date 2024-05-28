@@ -2,7 +2,7 @@
 #include <LiquidCrystal_I2C.h>
 #include "common.h"
 
-void graphics(){
+void graphics() {
    byte dino[56] = {
    //0- first half
    0b00000,

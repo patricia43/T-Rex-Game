@@ -2,6 +2,8 @@
 #include <LiquidCrystal_I2C.h>
 #include "common.h"
 
+#define jump_duration 3
+
 void initGame() {
   lcd.clear();
   for (int i = 0; i < 16; i++) {
@@ -35,17 +37,17 @@ void detectCollision() {
 
     // update leaderboard if the player got a new personal high score:
     int time_spent = millis();
+    playGameOverMelodyWithVolume(VOLUME);
 
     if (score > crtUsersHighScore) {
       crtUsersHighScore = score;
       updateLeaderboard();
-      readMyFile();
     }
     time_spent = millis() - time_spent;
-    //Serial.println(time_spent);
+
     // freeze the display to indicate game over:
-    if (time_spent < 400 && time_spent >= 0) {
-      delay(400 - time_spent);
+    if (time_spent < 200 && time_spent >= 0) {
+      delay(200 - time_spent);
     }
     // clear the screen
     lcd.clear();
@@ -55,10 +57,10 @@ void detectCollision() {
 }
 
 void game() {
-
   // detect jump
   UPbuttonState = digitalRead(upButton);
   if (UPbuttonState == HIGH && UPbuttonState != UPlastButtonState && !isJumping) {
+    playNoteWithVolume(JUMP_SOUND_FREQUENCY, JUMP_SOUND_DURATION, VOLUME);
     isJumping = true;
     jumpCounter = jump_duration; // Set jump duration
   }
@@ -171,3 +173,4 @@ void game() {
   UPlastButtonState = UPbuttonState;
   delay(180 - difficulty);
 }
+
